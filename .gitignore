@@ -1,0 +1,29 @@
+# Venvs
+.venv/
+tribev2/.venv/
+bddn/.venv/
+
+# Cache
+cache/
+__pycache__/
+*.pyc
+
+# Model weights
+*.ckpt
+*.pth
+*.safetensors
+
+# Data
+*.npy
+*.tsv
+nilearn_data/
+
+# OS
+.DS_Store
+
+# Eggs
+*.egg-info/
+
+# Cloned repos (external dependencies)
+tribev2/
+bddn/
