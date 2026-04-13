@@ -22,6 +22,8 @@ load_dotenv(Path(__file__).parent / ".env")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("neurotribe")
 
+from neurotribe.tracking import track_query, track_upload, track_suggestion_click, track_new_session
+
 # Reuse BrainBiz vectorstore for paper retrieval
 DB_DIR = Path(__file__).parent.parent / "brainbiz" / "vectorstore"
 
@@ -424,6 +426,7 @@ def main():
 
         st.divider()
         if st.button("New session", use_container_width=True):
+            track_new_session()
             for k in ["messages", "tribe_result", "_last_upload"]:
                 st.session_state.pop(k, None)
             st.rerun()
@@ -468,6 +471,7 @@ def main():
         ]):
             with cols[i % 3]:
                 if st.button(q, key=f"post_{i}", use_container_width=True):
+                    track_suggestion_click(q)
                     st.session_state["messages"].append({"role": "user", "content": q})
                     st.rerun()
 
@@ -487,6 +491,7 @@ def main():
         ]):
             with cols[i % 2]:
                 if st.button(q, key=f"pre_{i}", use_container_width=True):
+                    track_suggestion_click(q)
                     st.session_state["messages"].append({"role": "user", "content": q})
                     st.rerun()
 
@@ -548,10 +553,21 @@ def main():
             log.info(f"Encoding done: {result['n_timepoints']} timepoints in {result['elapsed_seconds']}s")
             st.session_state["tribe_result"] = result
 
+            track_upload(
+                filename=filename, modality=modality,
+                encoding_time=result.get("elapsed_seconds"),
+                n_timepoints=result.get("n_timepoints"),
+                attention_mean=result.get("attention"),
+                engagement_mean=result.get("engagement"),
+            )
+
             # Generate answer to user's question
             log.info(f"Generating response for: {prompt[:60]}...")
             answer, viz_list, brain_t = _generate_response(result, prompt)
             log.info(f"Response generated ({len(answer)} chars), viz={viz_list}")
+
+            track_query(query=prompt, has_brain_data=True,
+                        response_len=len(answer), viz_requested=viz_list)
 
             combined_msg = {
                 "role": "assistant",
@@ -579,6 +595,9 @@ def main():
             answer, viz_list, brain_t = _generate_response(result, prompt)
             log.info(f"Response generated ({len(answer)} chars), viz={viz_list}")
 
+            track_query(query=prompt, has_brain_data=True,
+                        response_len=len(answer), viz_requested=viz_list)
+
             new_msg = {"role": "assistant", "content": answer}
             if viz_list:
                 new_msg["viz"] = viz_list
@@ -597,6 +616,10 @@ def main():
             )
             answer = response.content[0].text
             log.info(f"Paper-only response generated ({len(answer)} chars)")
+
+            track_query(query=prompt, has_brain_data=False,
+                        response_len=len(answer), papers_retrieved=6)
+
             st.session_state["messages"].append({"role": "assistant", "content": answer})
 
         st.rerun()

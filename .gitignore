@@ -47,3 +47,6 @@ brainbiz/vectorstore/
 
 # Pycache in app dirs
 neurotribe/__pycache__/
+
+# Tracking logs (contains user data)
+neurotribe/tracking_logs/
