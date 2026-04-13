@@ -518,10 +518,22 @@ def main():
 
     prompt = st.chat_input(placeholder)
 
-    if not prompt:
-        return
+    # Check if there's an unanswered user message (from suggestion button clicks)
+    needs_response = (
+        st.session_state["messages"]
+        and st.session_state["messages"][-1]["role"] == "user"
+        and st.session_state["messages"][-1]["content"] != "__UPLOAD__"
+    )
 
-    log.info(f"User prompt: {prompt[:80]}...")
+    if prompt:
+        # New prompt from chat input — add to messages
+        log.info(f"User prompt from chat_input: {prompt[:80]}...")
+    elif needs_response:
+        # Pending unanswered message from suggestion button
+        prompt = st.session_state["messages"][-1]["content"]
+        log.info(f"Pending prompt from suggestion: {prompt[:80]}...")
+    else:
+        return
 
     # Re-check file state after prompt
     uploaded_file = st.session_state.get("file_upload")
@@ -586,7 +598,9 @@ def main():
     else:
         # ── Follow-up chat (no new file) ───────────────────────────
         log.info(f"Follow-up prompt (has_result={has_result})")
-        st.session_state["messages"].append({"role": "user", "content": prompt})
+        # Only append if not already added by a suggestion button
+        if not needs_response:
+            st.session_state["messages"].append({"role": "user", "content": prompt})
 
         result = st.session_state.get("tribe_result")
 
