@@ -3,7 +3,7 @@
 tribev2/.venv/
 bddn/.venv/
 
-# Cache
+# Cache and generated data
 cache/
 __pycache__/
 *.pyc
@@ -13,9 +13,17 @@ __pycache__/
 *.pth
 *.safetensors
 
-# Data
+# Media files
+*.mp4
+*.wav
+*.jpg
+*.png
+*.zip
+
+# Data files
 *.npy
 *.tsv
+*.csv
 nilearn_data/
 
 # OS
@@ -27,3 +35,12 @@ nilearn_data/
 # Cloned repos (external dependencies)
 tribev2/
 bddn/
+
+# Marimo session state
+__marimo__/
+
+# Experimental/scratch dirs
+brainbiz/
+neuroscript/
+neurotribe/
+scripts/
