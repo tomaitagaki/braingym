@@ -1,16 +1,16 @@
 """
-Phase 3: Run TRIBEv2 on Tsinghua videos via Modal.
+Phase 3 (parallel): Run TRIBEv2 on Tsinghua videos via Modal.
 
-Uploads local MP4s to Modal volume, runs Tribe, extracts brain timeseries.
+Up to 10 GPUs in parallel. Each GPU loads the model once and processes a batch.
 
 Usage:
-    modal run experiments/retention/03_modal_tribe.py
+    modal run experiments/retention/03_modal_tribe_parallel.py
 """
 
 import json
 import modal
 
-app = modal.App("braingym-retention")
+app = modal.App("braingym-retention-parallel")
 
 tribe_image = (
     modal.Image.debian_slim(python_version="3.11")
@@ -53,9 +53,10 @@ RESULTS_DIR = "/cache/tsinghua_results"
     secrets=[modal.Secret.from_name("huggingface-secret")],
     timeout=3600,
     memory=32768,
+    max_containers=10,
 )
 def process_batch(video_names: list[str], batch_idx: int) -> list[dict]:
-    """Process a batch of videos. Model loads once."""
+    """Process a batch of videos. Model loads once per batch."""
     import os
     import time
     import numpy as np
@@ -124,7 +125,7 @@ def process_batch(video_names: list[str], batch_idx: int) -> list[dict]:
 
         result_path = Path(RESULTS_DIR) / f"{video_id}.json"
         if result_path.exists():
-            print(f"  {video_id}: cached")
+            print(f"  [{batch_idx}] {video_id}: cached")
             results.append(json.loads(result_path.read_text()))
             continue
 
@@ -132,7 +133,7 @@ def process_batch(video_names: list[str], batch_idx: int) -> list[dict]:
             results.append({"video_id": video_id, "error": f"not found: {video_path}"})
             continue
 
-        print(f"  {video_id}: predicting...")
+        print(f"  [{batch_idx}] {video_id}: predicting...")
         t0 = time.time()
         try:
             df = model.get_events_dataframe(video_path=str(video_path))
@@ -141,7 +142,7 @@ def process_batch(video_names: list[str], batch_idx: int) -> list[dict]:
             results.append({"video_id": video_id, "error": str(e)[:500]})
             continue
 
-        print(f"  {video_id}: {preds.shape} in {time.time() - t0:.1f}s")
+        print(f"  [{batch_idx}] {video_id}: {preds.shape} in {time.time() - t0:.1f}s")
 
         preds_lh = preds[:, :N_VERTICES_HEMI]
         preds_rh = preds[:, N_VERTICES_HEMI:2 * N_VERTICES_HEMI]
@@ -173,7 +174,6 @@ def process_batch(video_names: list[str], batch_idx: int) -> list[dict]:
         result_path.write_text(json.dumps(result, indent=2))
         vol.commit()
         results.append(result)
-        print(f"  Done: cog_load={result['cognitive_load']:.4f}")
 
     return results
 
@@ -189,52 +189,48 @@ def main():
     with open(selected_dir / "video_ids.json") as f:
         video_ids = json.load(f)
 
-    # Check which MP4s exist locally
-    available = []
-    missing = []
-    for vid in video_ids:
-        mp4 = video_dir / f"{vid}.mp4"
-        if mp4.exists() and mp4.stat().st_size > 1000:
-            available.append(vid)
-        else:
-            missing.append(vid)
+    # Check available videos
+    available = [vid for vid in video_ids
+                 if (video_dir / f"{vid}.mp4").exists() and (video_dir / f"{vid}.mp4").stat().st_size > 1000]
+    print(f"Available: {len(available)} videos")
 
-    print(f"Available: {len(available)}, Missing: {len(missing)}")
     if not available:
-        print("No videos found. Download MP4s first.")
+        print("No videos found.")
         return
 
-    # Upload videos to Modal volume
-    print(f"Uploading {len(available)} videos to Modal volume...")
+    # Upload to volume
+    print(f"Uploading {len(available)} videos...")
     _vol = modal.Volume.from_name("braingym-cache")
     with _vol.batch_upload(force=True) as batch:
         for _i, vid in enumerate(available):
-            local_path = str(video_dir / f"{vid}.mp4")
-            batch.put_file(local_path, f"tsinghua_videos/{vid}.mp4")
+            batch.put_file(str(video_dir / f"{vid}.mp4"), f"tsinghua_videos/{vid}.mp4")
             if (_i + 1) % 20 == 0:
-                print(f"  Uploaded {_i + 1}/{len(available)}")
+                print(f"  {_i + 1}/{len(available)}")
     print("Upload complete")
 
-    # Process in batches of 5
+    # Split into batches
     BATCH_SIZE = 5
     video_names = [f"{vid}.mp4" for vid in available]
+    batches = [video_names[i:i + BATCH_SIZE] for i in range(0, len(video_names), BATCH_SIZE)]
+    print(f"\nProcessing {len(video_names)} videos in {len(batches)} batches (up to 10 parallel GPUs)")
+
+    # Fan out ALL batches in parallel
     all_results = []
+    for result_batch in process_batch.starmap(
+        [(batch, idx + 1) for idx, batch in enumerate(batches)],
+        order_outputs=False,
+    ):
+        all_results.extend(result_batch)
+        _successes = len([r for r in all_results if "error" not in r])
+        _errors = len([r for r in all_results if "error" in r])
+        print(f"  Progress: {_successes} succeeded, {_errors} errors")
 
-    for batch_idx in range(0, len(video_names), BATCH_SIZE):
-        batch = video_names[batch_idx:batch_idx + BATCH_SIZE]
-        batch_num = batch_idx // BATCH_SIZE + 1
-        total = (len(video_names) + BATCH_SIZE - 1) // BATCH_SIZE
-        print(f"\nBatch {batch_num}/{total} ({len(batch)} videos)")
-
-        results = process_batch.remote(batch, batch_num)
-        all_results.extend(results)
-
-        successes = [r for r in all_results if "error" not in r]
-        errors = [r for r in all_results if "error" in r]
-        with open(selected_dir / "tribe_results.json", "w") as f:
-            json.dump(successes, f, indent=2)
-        print(f"  Saved {len(successes)} results ({len(errors)} errors)")
-
+    # Save
     successes = [r for r in all_results if "error" not in r]
     errors = [r for r in all_results if "error" in r]
+    with open(selected_dir / "tribe_results.json", "w") as f:
+        json.dump(successes, f, indent=2)
+
     print(f"\nDone: {len(successes)} succeeded, {len(errors)} failed")
+    for e in errors:
+        print(f"  FAIL {e['video_id']}: {e.get('error', '')[:80]}")

@@ -1,11 +1,8 @@
 """
-Phase 2: Build per-second survival/retention curves for selected videos.
-
-For each video of duration D seconds:
-    S(t) = fraction of viewers with watch_time >= t, for t in [1, D]
+Phase 2: Build per-second retention/survival curves.
 
 Usage:
-    uv run python experiments/retention/02_retention_curves.py
+    python experiments/retention/02_retention_curves.py
 """
 
 import json
@@ -18,41 +15,22 @@ SELECTED = CACHE / "selected"
 
 
 def build_retention_curve(watch_times: np.ndarray, duration: float) -> dict:
-    """Build a per-second survival curve from individual watch times.
-
-    Args:
-        watch_times: Array of watch_time values (seconds) for one video
-        duration: Video duration in seconds
-
-    Returns:
-        dict with:
-            - seconds: [1, 2, ..., D]
-            - survival: S(t) at each second
-            - scalar metrics (half_life, early_drop, completion_rate, etc.)
-    """
     duration_int = int(np.ceil(duration))
     seconds = np.arange(1, duration_int + 1)
     n_viewers = len(watch_times)
 
-    # S(t) = fraction of viewers still watching at time t
     survival = np.array([(watch_times >= t).sum() / n_viewers for t in seconds])
 
-    # Derived scalar metrics
     half_life_idx = np.where(survival <= 0.5)[0]
     half_life = float(seconds[half_life_idx[0]]) if len(half_life_idx) > 0 else float(duration)
 
-    early_drop = float(survival[min(2, len(survival) - 1)] / survival[0]) if survival[0] > 0 else 0.0
+    early_drop = float(survival[min(2, len(survival) - 1)] / max(survival[0], 1e-10))
     completion_rate = float(survival[-1]) if len(survival) > 0 else 0.0
     rewatch_rate = float((watch_times > duration).sum() / n_viewers)
     retention_auc = float(np.trapezoid(survival, seconds) / duration) if duration > 0 else 0.0
 
-    # Slope: first derivative of survival curve (negative = drop-off)
     slope = np.gradient(survival, seconds)
-
-    # Cliff detection: where does the steepest drop happen?
     cliff_idx = int(np.argmin(slope))
-    cliff_second = int(seconds[cliff_idx])
-    cliff_magnitude = float(slope[cliff_idx])
 
     return {
         "seconds": seconds.tolist(),
@@ -64,71 +42,47 @@ def build_retention_curve(watch_times: np.ndarray, duration: float) -> dict:
         "completion_rate": completion_rate,
         "rewatch_rate": rewatch_rate,
         "retention_auc": retention_auc,
-        "cliff_second": cliff_second,
-        "cliff_magnitude": cliff_magnitude,
+        "cliff_second": int(seconds[cliff_idx]),
+        "cliff_magnitude": float(slope[cliff_idx]),
     }
 
 
 def main():
-    # Load selected videos
     selected = pd.read_csv(SELECTED / "selected_videos.csv")
-    interactions = pd.read_csv(CACHE / "interaction_filtered.csv")
+    interactions = pd.read_csv(CACHE / "interaction_sampled.csv")
 
-    print(f"Building retention curves for {len(selected)} videos...")
+    selected_ids = set(selected["pid"].tolist())
+    interactions = interactions[interactions["pid"].isin(selected_ids)]
+    print(f"Building retention curves for {len(selected)} videos ({len(interactions):,} interactions)...")
 
-    # Filter interactions to selected videos only
-    selected_ids = set(selected["video_id"].tolist())
-    interactions = interactions[interactions["video_id"].isin(selected_ids)]
-    print(f"Filtered interactions: {len(interactions):,}")
-
-    # Build curves
     results = {}
     for _, row in selected.iterrows():
-        vid = row["video_id"]
+        vid = row["pid"]
         duration = row["duration"]
-
-        watch_times = interactions[interactions["video_id"] == vid]["watch_time"].values
+        watch_times = interactions[interactions["pid"] == vid]["watch_time"].values
 
         if len(watch_times) < 5:
-            print(f"  Skipping {vid}: only {len(watch_times)} viewers")
             continue
 
         curve = build_retention_curve(watch_times, duration)
-        curve["video_id"] = vid
-        curve["duration"] = duration
+        curve["video_id"] = int(vid)
+        curve["duration"] = float(duration)
         results[str(vid)] = curve
 
-    print(f"\nBuilt {len(results)} retention curves")
+    print(f"Built {len(results)} curves")
 
-    # Summary statistics
+    # Summary
     metrics = pd.DataFrame([
-        {
-            "video_id": v["video_id"],
-            "duration": v["duration"],
-            "n_viewers": v["n_viewers"],
-            "half_life": v["half_life"],
-            "early_drop_3s": v["early_drop_3s"],
-            "completion_rate": v["completion_rate"],
-            "rewatch_rate": v["rewatch_rate"],
-            "retention_auc": v["retention_auc"],
-            "cliff_second": v["cliff_second"],
-        }
-        for v in results.values()
+        {k: v for k, v in c.items() if k not in ("seconds", "survival", "slope")}
+        for c in results.values()
     ])
-
-    print("\nRetention metrics summary:")
-    print(metrics[["half_life", "completion_rate", "rewatch_rate", "retention_auc"]].describe())
+    print(metrics[["half_life", "completion_rate", "retention_auc", "early_drop_3s"]].describe())
 
     # Save
-    output_path = SELECTED / "retention_curves.json"
-    with open(output_path, "w") as f:
-        json.dump(results, f, indent=2)
-
+    with open(SELECTED / "retention_curves.json", "w") as f:
+        json.dump(results, f)
     metrics.to_csv(SELECTED / "retention_metrics.csv", index=False)
-
-    print(f"\nSaved curves: {output_path}")
-    print(f"Saved metrics: {SELECTED / 'retention_metrics.csv'}")
-    print(f"Next: run 03_modal_tribe.py to get brain timeseries")
+    print(f"Saved to {SELECTED}/")
 
 
 if __name__ == "__main__":
