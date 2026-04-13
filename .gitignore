@@ -39,8 +39,11 @@ bddn/
 # Marimo session state
 __marimo__/
 
-# Experimental/scratch dirs
-brainbiz/
-neuroscript/
-neurotribe/
-scripts/
+# Generated vectorstore (rebuild with brainbiz/embed_corpus.py)
+brainbiz/vectorstore/
+
+# Env files with secrets
+**/.env
+
+# Pycache in app dirs
+neurotribe/__pycache__/
