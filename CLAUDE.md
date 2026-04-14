@@ -48,3 +48,12 @@ This means: **Tribe's brain prediction at time t reflects the stimulus at time t
 - `experiments/retention/03_modal_tribe_parallel.py` — Tsinghua Modal pipeline (10 GPU parallel)
 - `quantify.py` — ROI extraction from Tribe predictions
 - `recover_results.py` — recover cached results from Modal volume
+- `experiments/tts_brain.py` — TTS voice comparison experiment
+
+### GEPA (Genetic-Pareto Prompt Optimization)
+
+From https://arxiv.org/abs/2507.19457 — optimizes prompts through natural language reflection instead of gradient updates. 35x fewer rollouts than GRPO. The approach for braingym: use GEPA to optimize Manim generation prompts where Tribe brain metrics are the reward signal. Cycle: sample Manim outputs → run Tribe → reflect on which presentations scored best cognitively → evolve the prompt.
+
+### TTS Experiment Finding (2026-04-13)
+
+Same text with different TTS voices produces nearly identical brain predictions (r=0.84-0.99). Different text with the same voice produces much more different patterns (r=0.55-0.90). **Content drives ~85-90% of predicted brain response; voice/prosody drives ~5-15%.** TTS optimization is real but marginal in the brain encoding framework. Exception: emotional content with flat delivery (gTTS on narrative) shows the largest voice effect.
