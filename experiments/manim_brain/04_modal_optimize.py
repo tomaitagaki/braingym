@@ -62,10 +62,11 @@ manim_image = (
 # ============================================================
 
 PARAM_SPACE = {
-    "pacing": {"type": "float", "low": 0.3, "high": 3.0},
-    "pause_duration": {"type": "float", "low": 0.1, "high": 2.5},
-    "visual_density": {"type": "float", "low": 0.0, "high": 1.0},
-    "text_density": {"type": "float", "low": 0.0, "high": 1.0},
+    "pacing": {"type": "float", "low": 0.5, "high": 2.5},
+    "pause_duration": {"type": "float", "low": 0.3, "high": 2.0},
+    # Clamped floors: optimizer must include visuals AND text (no degenerate solutions)
+    "visual_density": {"type": "float", "low": 0.4, "high": 1.0},
+    "text_density": {"type": "float", "low": 0.3, "high": 1.0},
     "reveal_style": {
         "type": "categorical",
         "choices": ["sequential", "simultaneous", "progressive"],
