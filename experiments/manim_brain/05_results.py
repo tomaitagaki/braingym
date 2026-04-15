@@ -254,26 +254,42 @@ def _(mo, np, opt_data, plt):
     _ax.set_title("Continuous Param Convergence")
     _ax.legend(fontsize=8)
 
-    # (D) Categorical param convergence
+    # (D) Categorical param convergence — one subplot per parameter
     _ax = _axes_opt[1, 1]
-    _cat = {
-        "reveal_style": ["sequential", "simultaneous", "progressive"],
-        "color_scheme": ["mono", "dual", "vibrant"],
-        "narrative_hook": ["none", "question", "story", "surprise"],
+    _cat_params = {
+        "reveal_style": {
+            "choices": ["sequential", "simultaneous", "progressive"],
+            "colors": ["#22c55e", "#94a3b8", "#d4d4d4"],
+        },
+        "color_scheme": {
+            "choices": ["mono", "dual", "vibrant"],
+            "colors": ["#d4d4d4", "#4a9eed", "#94a3b8"],
+        },
+        "narrative_hook": {
+            "choices": ["none", "question", "story", "surprise"],
+            "colors": ["#f59e0b", "#d4d4d4", "#d4d4d4", "#d4d4d4"],
+        },
     }
-    for _pn, _choices in _cat.items():
-        for _ch in _choices:
+    _styles = ["-", "--", ":"]
+    for _pi, (_pn, _spec) in enumerate(_cat_params.items()):
+        for _ci, _ch in enumerate(_spec["choices"]):
             _probs = [r["distributions"][_pn]["probs"][_ch] for r in opt_data]
-            _clr = "#22c55e" if _probs[-1] > 0.5 else "#94a3b8"
-            _ax.plot(_gens, _probs, "o-", color=_clr, markersize=3, alpha=0.8)
-            _ax.text(len(_gens) - 1 + 0.3, _probs[-1],
-                    f"{_ch} ({_probs[-1]:.0%})", fontsize=7, va="center",
-                    color=_clr, fontweight="bold" if _probs[-1] > 0.5 else "normal")
+            _is_winner = _probs[-1] > 0.5
+            _ax.plot(
+                _gens, _probs,
+                linestyle=_styles[_pi],
+                color=_spec["colors"][_ci],
+                markersize=0,
+                linewidth=2.5 if _is_winner else 1,
+                alpha=1.0 if _is_winner else 0.3,
+                label=f"{_ch}" if _is_winner else None,
+            )
     _ax.set_xlabel("Generation")
     _ax.set_ylabel("Probability")
-    _ax.set_title("Categorical Param Convergence")
+    _ax.set_title("Categorical Winners")
     _ax.set_ylim(-0.05, 1.05)
     _ax.axhline(0.5, color="gray", linestyle=":", alpha=0.3)
+    _ax.legend(fontsize=9, title="Converged to:", title_fontsize=9, loc="center right")
 
     plt.tight_layout()
     mo.output.replace(_fig_opt)
