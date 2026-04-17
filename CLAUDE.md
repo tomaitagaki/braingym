@@ -1,3 +1,8 @@
+---
+title: Claude
+marimo-version: 0.23.0
+---
+
 # BrainGym
 
 fMRI brain encoding models predicting engagement and retention from video content.
@@ -95,3 +100,16 @@ Ran DDPO (RL fine-tuning) on SD 1.5 with Tribe brain predictions as reward signa
 - GEPA (DSPy LLM-guided strategy evolution) for open-ended content exploration
 - DDPO for diffusion model RL fine-tuning (custom implementation)
 - Proven: GRPO converges on synthetic reward; full DDPO + Tribe loop runs on Modal A100
+
+**Manim GRPO Experiments (2026-04-14 through 2026-04-17):**
+
+Ran GRPO optimization on Manim-generated educational animations (Pythagorean theorem, CNN architecture) with Tribe brain predictions as reward. The optimization loop works mechanically — GRPO converges, reward increases (+27-31% over baseline), distributions narrow. But the experiment fundamentally fails for a different reason:
+
+**Tribe's predicted brain response is dominated by the content itself, not the presentation style.** Tweaking pacing, reveal style, colors, and detail level produces marginal variation compared to what the content (the actual visual objects, text, and structure) drives. The presentation parameters we optimize are second-order effects on top of a first-order content signal.
+
+Specific failures:
+- **Pythagorean GRPO** degenerated — the optimizer removed the triangle diagram entirely because shorter videos scored higher on attention-per-second. Content was not properly constrained.
+- **CNN GRPO** with mandatory content blocks showed +31% improvement, but the "optimized" videos are not meaningfully different to a human viewer. The reward difference between presentation styles is small relative to the noise.
+- **Video segment experiment** on a mandelbrot fallback was wasted compute — the source video was synthetic and nearly uniform, producing a flat reward landscape.
+
+**Core insight:** For this paradigm to work, you need to optimize the CONTENT (what is shown/said), not just the PRESENTATION (how fast, what color). But optimizing content requires a generative model (LLM writing scripts, video diffusion) and introduces the problem of controlling for information completeness. The TTS experiment already showed this: content drives ~85-90% of predicted brain response, delivery drives ~5-15%. Presentation optimization is optimizing the 5-15%.
