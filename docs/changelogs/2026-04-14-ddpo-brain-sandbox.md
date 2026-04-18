@@ -1,3 +1,8 @@
+---
+title: 2026 04 14 Ddpo Brain Sandbox
+marimo-version: 0.23.0
+---
+
 # Brain-Reward Sandbox + DDPO Image Experiment
 
 **Date:** 2026-04-14
