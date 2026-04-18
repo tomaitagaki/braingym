@@ -7,6 +7,10 @@ bddn/.venv/
 cache/
 __pycache__/
 *.pyc
+__marimo__/
+
+# Secrets
+.env
 
 # Model weights
 *.ckpt
@@ -16,7 +20,10 @@ __pycache__/
 # Data
 *.npy
 *.tsv
+*.bin
 nilearn_data/
+vectorstore/
+tracking_logs/
 
 # OS
 .DS_Store
